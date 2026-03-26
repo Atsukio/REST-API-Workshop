@@ -1,6 +1,6 @@
 <template>
   <section class="todo-app">
-    <h1>Todo List (API)</h1>
+    <h1>Todo List</h1>
 
     <div class="input-row">
       <input
@@ -22,13 +22,34 @@
         :key="todo.id"
         class="todo-item"
       >
-        <span :class="{ done: todo.done }">{{ todo.text }}</span>
-        <span class="actions">
-          <button @click="toggleDone(todo)">
-            {{ todo.done ? "Undo" : "Done" }}
-          </button>
-          <button @click="removeTodo(todo)">Delete</button>
-        </span>
+        <!-- Edit mode -->
+        <template v-if="editingId === todo.id">
+          <input
+            v-model="editText"
+            class="edit-input"
+            @keydown.enter="saveEdit(todo)"
+            @keydown.esc="cancelEdit"
+          >
+          <span class="actions">
+            <button
+              class="btn-save"
+              @click="saveEdit(todo)"
+            >Save</button>
+            <button @click="cancelEdit">Cancel</button>
+          </span>
+        </template>
+
+        <!-- View mode -->
+        <template v-else>
+          <span :class="{ done: todo.done }">{{ todo.text }}</span>
+          <span class="actions">
+            <button @click="toggleDone(todo)">
+              {{ todo.done ? "Undo" : "Done" }}
+            </button>
+            <button @click="startEdit(todo)">Edit</button>
+            <button @click="removeTodo(todo)">Delete</button>
+          </span>
+        </template>
       </li>
     </ul>
 
@@ -51,14 +72,43 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-// You can configure API_BASE in .env or as runtime config
 const API_BASE = 'http://localhost:8000/api'
 
-// local state
 const newTodo = ref('')
 const todos = ref(null)
 const loading = ref(true)
 const error = ref(null)
+
+// Edit state
+const editingId = ref(null)
+const editText = ref('')
+
+function startEdit(todo) {
+  editingId.value = todo.id
+  editText.value = todo.text
+}
+
+function cancelEdit() {
+  editingId.value = null
+  editText.value = ''
+}
+
+async function saveEdit(todo) {
+  const text = editText.value.trim()
+  if (!text) return
+  try {
+    const res = await fetch(`${API_BASE}/todos/${todo.id}/`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text })
+    })
+    if (!res.ok) throw new Error(`Update failed: ${res.status}`)
+    cancelEdit()
+    await loadTodos()
+  } catch (e) {
+    error.value = e?.message ?? 'Update failed'
+  }
+}
 
 async function loadTodos() {
   loading.value = true
@@ -66,9 +116,7 @@ async function loadTodos() {
   try {
     const res = await fetch(`${API_BASE}/todos/`)
     if (!res.ok) throw new Error(`Failed to load: ${res.status}`)
-    const data = await res.json()
-    // DRF returns an array of todos
-    todos.value = data
+    todos.value = await res.json()
   } catch (e) {
     error.value = e?.message ?? 'Unknown error'
   } finally {
@@ -86,7 +134,6 @@ async function addTodo() {
       body: JSON.stringify({ text, done: false })
     })
     if (!res.ok) throw new Error(`Create failed: ${res.status}`)
-    // refresh list
     await loadTodos()
     newTodo.value = ''
   } catch (e) {
@@ -155,6 +202,7 @@ button {
 .todo-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   padding: 8px 0;
   border-bottom: 1px solid #eee;
 }
@@ -164,8 +212,23 @@ button {
   color: #888;
 }
 
+.edit-input {
+  flex: 1;
+  margin-right: 8px;
+  padding: 4px 8px;
+  font-size: 15px;
+}
+
 .actions button {
   margin-left: 6px;
+}
+
+.btn-save {
+  background: #3b82f6;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
 }
 
 .hint {
