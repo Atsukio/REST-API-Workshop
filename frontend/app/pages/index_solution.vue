@@ -156,8 +156,15 @@ async function toggleDone(todo) {
 }
 
 async function removeTodo(todo) {
-  // TODO: Implement delete API call
-  console.log(todo)
+  try {
+    const res = await fetch(`${API_BASE}/todos/${todo.id}/`, {
+      method: 'DELETE'
+    })
+    if (!res.ok) throw new Error(`Delete failed: ${res.status}`)
+    await loadTodos()
+  } catch (e) {
+    error.value = e?.message ?? 'Delete failed'
+  }
 }
 
 onMounted(loadTodos)
